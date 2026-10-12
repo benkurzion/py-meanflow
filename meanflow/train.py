@@ -22,7 +22,7 @@ from models.model_configs import instantiate_model
 from train_arg_parser import get_args_parser
 
 from training import distributed_mode
-from training.data_transform import get_transform_cifar, get_transform_mnist
+from training.data_transform import get_transform_cifar, get_transform_mnist, get_transform_ffhq256
 from training.eval_loop import eval_model
 from training.load_and_save import load_model, save_model
 from training.train_loop import train_one_epoch, train_step
@@ -48,6 +48,27 @@ def print_model(model):
     logger.info(f"Total params: {num_params}")
 
 
+class FlatImageDataset(torch.utils.data.Dataset):
+    """Dataset for a flat directory of PNG images (no class subdirectories)."""
+    def __init__(self, root, transform=None, indices=None):
+        import PIL.Image
+        self._loader = PIL.Image.open
+        all_paths = sorted(Path(root).glob("*.png"))
+        assert len(all_paths) > 0, f"No PNG files found in {root}"
+        self.paths = [all_paths[i] for i in indices] if indices is not None else all_paths
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        import PIL.Image
+        img = PIL.Image.open(self.paths[idx]).convert("RGB")
+        if self.transform is not None:
+            img = self.transform(img)
+        return img, 0  # dummy label for compatibility
+
+
 def get_data_loader(args, is_for_fid):
     if args.dataset == "cifar10":
         transforms = get_transform_cifar(is_for_fid)
@@ -65,6 +86,16 @@ def get_data_loader(args, is_for_fid):
             download=True,
             transform=transforms,
         )
+    elif args.dataset == "ffhq256":
+        transforms = get_transform_ffhq256(is_for_fid)
+        ffhq_root = os.path.join(args.data_path, "train")
+        n_total = len(list(Path(ffhq_root).glob("*.png")))
+        assert n_total > 0, f"No PNG files found in {ffhq_root}"
+        n_test = max(1, int(n_total * args.test_fraction))
+        # Fixed seed so train/test split is the same regardless of args.seed
+        perm = torch.randperm(n_total, generator=torch.Generator().manual_seed(0)).tolist()
+        indices = perm[:n_test] if is_for_fid else perm[n_test:]
+        dataset = FlatImageDataset(root=ffhq_root, transform=transforms, indices=indices)
     else:
         raise NotImplementedError(f"Unsupported dataset {args.dataset}")
 
@@ -207,20 +238,21 @@ def main(args):
                 meters=meters
             )
 
+        if args.output_dir and not args.eval_only:
+            save_model(
+                args=args,
+                model_without_ddp=model_without_ddp,
+                optimizer=optimizer,
+                lr_schedule=lr_schedule,
+                epoch=epoch,
+            )
+            logging.info(f"Saved checkpoint to {args.output_dir}")
+
         if args.output_dir and (
             (args.eval_frequency > 0 and (epoch + 1) % args.eval_frequency == 0)
             or args.eval_only
             or args.test_run
         ):
-            if not args.eval_only:
-                save_model(
-                    args=args,
-                    model_without_ddp=model_without_ddp,
-                    optimizer=optimizer,
-                    lr_schedule=lr_schedule,
-                    epoch=epoch,
-                )
-                logging.info(f"Saved checkpoint to {args.output_dir}")
 
             # Eval ema model:
             net_eval = model_without_ddp.net_ema

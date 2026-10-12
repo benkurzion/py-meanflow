@@ -4,6 +4,7 @@ import torch.nn as nn
 
 from models.time_sampler import sample_two_timesteps
 from models.ema import init_ema, update_ema_net
+from models.utils import sample_t_diff, sample_noisy_image
 
 
 class MeanFlow(nn.Module):
@@ -34,9 +35,14 @@ class MeanFlow(nn.Module):
             update_ema_net(self.net, self._modules[f"net_ema{i + 1}"], num_updates)
 
     def forward_with_loss(self, x, aug_cond):
+        B, C, H, W = x.shape
 
         device = x.device
         e = torch.randn_like(x).to(device)
+
+        t_diff = sample_t_diff(B).to(device)
+        x_t, _ = sample_noisy_image(x, t_diff)
+
         t, r = sample_two_timesteps(self.args, num_samples=x.shape[0], device=device)
         t, r = t.view(-1, 1, 1, 1), r.view(-1, 1, 1, 1)
 
@@ -46,7 +52,8 @@ class MeanFlow(nn.Module):
         # define network function
         def u_func(z, t, r):
             h = t - r
-            return self.net(z, (t.view(-1), h.view(-1)), aug_cond)
+            z = torch.concat((z, x_t), dim=1)  # along channel dim (B,6,H,W)
+            return self.net(z, (t.view(-1), h.view(-1), t_diff), aug_cond)
 
         dtdt = torch.ones_like(t)
         drdt = torch.zeros_like(r)

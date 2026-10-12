@@ -19,6 +19,7 @@ from torchmetrics.image.fid import FrechetInceptionDistance
 from torchvision.utils import save_image
 from training import distributed_mode
 import models.rng as rng
+from inference import stmd_inference
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ def eval_model(
                 #per node and per step seed
                 torch.manual_seed(rng.fold_in(args.seed, rng.get_rank(), data_iter_step, epoch))
                 with torch.amp.autocast('cuda', enabled=False), torch.no_grad():
-                    synthetic_samples = model_without_ddp.sample(samples_shape=samples.shape, net=net_ema, device=device)
+                    synthetic_samples = stmd_inference(samples_shape=samples.shape, model=net_ema, n_inf=args.n_inf, n_mf=args.n_mf, device=device)
             torch.cuda.synchronize()
 
             # Scaling to [0, 1] from [-1, 1]

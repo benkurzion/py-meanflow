@@ -25,8 +25,9 @@ def get_args_parser():
     parser.add_argument("--ema_decays", default=[0.99995, 0.9996], nargs="+", type=float, help="Extra EMA decay rates.")
 
     # Dataset parameters
-    parser.add_argument("--dataset", default='cifar10', type=str, choices=['cifar10', 'mnist'], help="Dataset to use.")
+    parser.add_argument("--dataset", default='cifar10', type=str, choices=['cifar10', 'mnist', 'ffhq256'], help="Dataset to use.")
     parser.add_argument("--data_path", default="./data", type=str, help="data root folder with train, val and test subfolders")
+    parser.add_argument("--test_fraction", default=0.1, type=float, help="Fraction of data to reserve as a held-out test set (ffhq256 only).")
 
     parser.add_argument("--output_dir", default="./output_dir", help="path where to save, empty for no saving")
     parser.add_argument("--fid_samples", default=50000, type=int, help="number of synthetic samples for FID evaluations")
@@ -63,8 +64,12 @@ def get_args_parser():
     
     parser.add_argument("--norm_p", default=0.75, type=float, help="Norm power for adaptive weight.")
     parser.add_argument("--norm_eps", default=1e-3, type=float, help="Small constant for adaptive weight division.")
-    parser.add_argument("--arch", default="unet", type=str, choices=["unet",], help="Architecture to use.")
+    parser.add_argument("--arch", default="unet", type=str, choices=["unet", "unet_ffhq256"], help="Architecture to use.")
     parser.add_argument("--use_edm_aug", action="store_true", dest="use_edm_aug", default=False, help="Enable EDM augmentation with augment labels as conditions.")
+
+    # STMD Additions
+    parser.add_argument("--n_inf", default=1, type=int, help="Number of outer diffusion steps")
+    parser.add_argument("--n_mf", default=1, type=int, help="Number of inner mean flow steps")
 
     # Debugging settings
     parser.add_argument("--test_run", action="store_true", help="Only run one batch of training and evaluation.")

@@ -11,18 +11,32 @@ from models.unet import SongUNet
 
 MODEL_ARCHS = {
     "unet": SongUNet,
+    "unet_ffhq256": SongUNet,
 }
 
 MODEL_CONFIGS = {
     "unet": {
         "img_resolution": 32,
-        "in_channels": 3,
+        "in_channels": 6,
         "out_channels": 3,
         "channel_mult_noise": 2,
         "resample_filter": [1, 3, 3, 1],
         "channel_mult": [2, 2, 2],
         "encoder_type": "standard",
         "decoder_type": "standard",
+    },
+    "unet_ffhq256": {
+        "img_resolution": 256,
+        "in_channels": 6,
+        "out_channels": 3,
+        "model_channels": 128,
+        "channel_mult_noise": 2,
+        "resample_filter": [1, 3, 3, 1],
+        "channel_mult": [1, 2, 2, 2],
+        "attn_resolutions": [16],
+        "encoder_type": "residual",
+        "decoder_type": "standard",
+        "num_blocks": 4,
     },
 }
 

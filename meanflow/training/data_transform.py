@@ -22,6 +22,21 @@ def get_transform_cifar(is_for_fid):
     return Compose(transform_list)
 
 
+def get_transform_ffhq256(is_for_fid):
+    if is_for_fid:
+        transform_list = [
+            ToImage(),
+            ToDtype(torch.float32, scale=True),
+        ]
+    else:
+        transform_list = [
+            ToImage(),
+            RandomHorizontalFlip(),
+            ToDtype(torch.float32, scale=True),
+        ]
+    return Compose(transform_list)
+
+
 def get_transform_mnist():
     transform_list = [
         Resize((32, 32)),  # Resize images to 32x32 pixels for debugging
