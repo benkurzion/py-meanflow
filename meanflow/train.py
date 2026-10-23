@@ -22,7 +22,7 @@ from models.model_configs import instantiate_model
 from train_arg_parser import get_args_parser
 
 from training import distributed_mode
-from training.data_transform import get_transform_cifar, get_transform_mnist, get_transform_ffhq256
+from training.data_transform import get_transform_cifar, get_transform_cifar32, get_transform_mnist, get_transform_ffhq256
 from training.eval_loop import eval_model
 from training.load_and_save import load_model, save_model
 from training.train_loop import train_one_epoch, train_step
@@ -46,6 +46,53 @@ def print_model(model):
             logger.info(f"{name:48} | {str(list(param.shape)):24} | std: {param_std:.6f}")
     logger.info("=" * 91)
     logger.info(f"Total params: {num_params}")
+
+
+class ZipImageDataset(torch.utils.data.Dataset):
+    """Dataset that reads images from a named subfolder inside a zip file.
+
+    Handles both flat layouts (subfolder/img.png) and class-nested layouts
+    (subfolder/class/img.png), and tolerates a single root directory in the zip.
+    All image bytes are loaded into memory at init time for DataLoader compatibility.
+    """
+
+    _IMAGE_EXTS = {".png", ".jpg", ".jpeg"}
+
+    def __init__(self, zip_path, subfolder, transform=None):
+        import io
+        import zipfile
+        self.transform = transform
+
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            all_names = zf.namelist()
+            self.image_names = self._find_images(all_names, subfolder)
+            assert len(self.image_names) > 0, (
+                f"No images found under '{subfolder}/' in {zip_path}. "
+                f"Entries sample: {all_names[:5]}"
+            )
+            self.image_bytes = [zf.read(n) for n in self.image_names]
+
+    @classmethod
+    def _find_images(cls, names, subfolder):
+        result = []
+        for name in names:
+            parts = name.replace("\\", "/").split("/")
+            if subfolder in parts:
+                if os.path.splitext(parts[-1])[1].lower() in cls._IMAGE_EXTS:
+                    if not parts[-1].startswith("."):
+                        result.append(name)
+        return result
+
+    def __len__(self):
+        return len(self.image_names)
+
+    def __getitem__(self, idx):
+        import io
+        import PIL.Image
+        img = PIL.Image.open(io.BytesIO(self.image_bytes[idx])).convert("RGB")
+        if self.transform is not None:
+            img = self.transform(img)
+        return img, 0
 
 
 class FlatImageDataset(torch.utils.data.Dataset):
@@ -78,6 +125,11 @@ def get_data_loader(args, is_for_fid):
             download=True,
             transform=transforms,
         )
+    elif args.dataset == "cifar10_zip":
+        transforms = get_transform_cifar32(is_for_fid)
+        subfolder = "test" if is_for_fid else "train"
+        zip_path = os.path.join(args.data_path, "CIFAR-10.zip")
+        dataset = ZipImageDataset(zip_path=zip_path, subfolder=subfolder, transform=transforms)
     elif args.dataset == "mnist":  # 3x32x32 MNIST for fast development
         transforms = get_transform_mnist()
         dataset = datasets.MNIST(

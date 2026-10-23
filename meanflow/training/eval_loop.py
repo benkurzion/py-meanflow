@@ -41,10 +41,13 @@ def eval_model(
     if args.distributed:
         data_loader.sampler.set_epoch(0)
 
-    assert args.fid_samples <= len(data_loader.dataset), (
-        f"In this interface, dataset size ({len(data_loader.dataset)}) must be larger than FID samples ({args.fid_samples})."
-    )
-    fid_samples = math.ceil(args.fid_samples / distributed_mode.get_world_size())
+    available = len(data_loader.dataset)
+    if args.fid_samples > available:
+        logger.warning(
+            f"fid_samples ({args.fid_samples}) exceeds dataset size ({available}); "
+            f"capping at {available}."
+        )
+    fid_samples = math.ceil(min(args.fid_samples, available) / distributed_mode.get_world_size())
 
     fid_metric = FrechetInceptionDistance(normalize=True).to(device=device, non_blocking=True)
 

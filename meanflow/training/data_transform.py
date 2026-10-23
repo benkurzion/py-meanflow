@@ -37,6 +37,24 @@ def get_transform_ffhq256(is_for_fid):
     return Compose(transform_list)
 
 
+def get_transform_cifar32(is_for_fid):
+    """Like get_transform_cifar but with an explicit Resize to 32x32 for zip-sourced images."""
+    if is_for_fid:
+        transform_list = [
+            Resize((32, 32)),
+            ToImage(),
+            ToDtype(torch.float32, scale=True),
+        ]
+    else:
+        transform_list = [
+            Resize((32, 32)),
+            RandomHorizontalFlip(),
+            ToImage(),
+            ToDtype(torch.float32, scale=True),
+        ]
+    return Compose(transform_list)
+
+
 def get_transform_mnist():
     transform_list = [
         Resize((32, 32)),  # Resize images to 32x32 pixels for debugging

@@ -35,6 +35,9 @@ MANIFEST
 # VSCode
 *.vscode
 
+# Data directory
+/data
+
 # Others
 meanflow/outputs
 meanflow/data
