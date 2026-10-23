@@ -309,7 +309,7 @@ class SongUNet(torch.nn.Module):
         self.map_noise = PositionalEmbedding(num_channels=noise_channels, endpoint=True) if embedding_type == 'positional' else FourierEmbedding(num_channels=noise_channels)
         self.map_label = Linear(in_features=label_dim, out_features=noise_channels, **init) if label_dim else None
         self.map_augment = Linear(in_features=augment_dim, out_features=noise_channels * 2, bias=False, **init) if augment_dim else None
-        self.map_layer0 = Linear(in_features=noise_channels * 2, out_features=emb_channels, **init)
+        self.map_layer0 = Linear(in_features=noise_channels * 3, out_features=emb_channels, **init)
         self.map_layer1 = Linear(in_features=emb_channels, out_features=emb_channels, **init)
 
         # Encoder.
@@ -363,15 +363,17 @@ class SongUNet(torch.nn.Module):
         # augment_labels = extra.get('aug_cond', None)
         # class_labels = extra.get('class_labels', None)
 
-        assert type(time_steps) is tuple and len(time_steps) == 2, "time_steps must be a tuple of (t, h) where t is the current time step and h is another time condiion."
-        t, h = time_steps
+        assert type(time_steps) is tuple and len(time_steps) == 3, "time_steps must be a tuple of (t, h, t_diff) where t is the flow time, h = t-r is the interval, and t_diff is the diffusion time."
+        t, h, t_diff = time_steps
 
         # Mapping.
         emb_t = self.map_noise(t)
         emb_t = emb_t.reshape(emb_t.shape[0], 2, -1).flip(1).reshape(*emb_t.shape) # swap sin/cos
         emb_h = self.map_noise(h)
         emb_h = emb_h.reshape(emb_h.shape[0], 2, -1).flip(1).reshape(*emb_h.shape) # swap sin/cos
-        emb = torch.cat([emb_t, emb_h], dim=1)
+        emb_tdiff = self.map_noise(t_diff)
+        emb_tdiff = emb_tdiff.reshape(emb_tdiff.shape[0], 2, -1).flip(1).reshape(*emb_tdiff.shape) # swap sin/cos
+        emb = torch.cat([emb_t, emb_h, emb_tdiff], dim=1)
 
         if self.map_label is not None:
             raise NotImplementedError

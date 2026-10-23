@@ -75,12 +75,15 @@ class MeanFlow(nn.Module):
         return loss
     
     def sample(self, samples_shape, net=None, device=None):
-        net = net if net is not None else self.net_ema                
+        net = net if net is not None else self.net_ema
 
         e = torch.randn(samples_shape, dtype=torch.float32, device=device)
         z_1 = e
         t = torch.ones(samples_shape[0], device=device)
         r = torch.zeros(samples_shape[0], device=device)
-        u = net(z_1, (t, t - r), aug_cond=None)
+        t_diff = torch.ones(samples_shape[0], device=device)  # fully noisy diffusion state
+        x_t = e  # at t_diff=1, x_t is pure diffusion noise
+        z_input = torch.cat([z_1, x_t], dim=1)  # (B, 6, H, W)
+        u = net(z_input, (t, t - r, t_diff), aug_cond=None)
         z_0 = z_1 - u
         return z_0
