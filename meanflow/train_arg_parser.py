@@ -70,6 +70,8 @@ def get_args_parser():
     # STMD Additions
     parser.add_argument("--n_inf", default=1, type=int, help="Number of outer diffusion steps")
     parser.add_argument("--n_mf", default=1, type=int, help="Number of inner mean flow steps")
+    parser.add_argument("--zeta_prime", default=1.0, type=float,
+                        help="Weight for the encoder measurement consistency loss.")
 
     # Debugging settings
     parser.add_argument("--test_run", action="store_true", help="Only run one batch of training and evaluation.")

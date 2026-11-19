@@ -18,6 +18,7 @@ import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
 import torchvision.datasets as datasets
+sys.path.insert(0, str(Path(__file__).parent.parent / "measurement_operators"))
 from models.model_configs import instantiate_model
 from train_arg_parser import get_args_parser
 
@@ -238,7 +239,7 @@ def main(args):
         model_without_ddp = model.module
 
     optimizer = torch.optim.Adam(  # Note: Adam, not AdamW
-        model_without_ddp.net.parameters(),  # only the "net" parameters
+        list(model_without_ddp.net.parameters()) + list(model_without_ddp.encoder.parameters()),
         lr=args.lr,
         betas=args.optimizer_betas,
         weight_decay=0.0
@@ -265,11 +266,13 @@ def main(args):
     )
 
     batch_loss = MeanMetric().to(device, non_blocking=True)
+    batch_meas_loss = MeanMetric().to(device, non_blocking=True)
     batch_time = MeanMetric().to(device, non_blocking=True)
     batch_loss.reset()
+    batch_meas_loss.reset()
     batch_time.reset()
 
-    meters = {'batch_loss': batch_loss, 'batch_time': batch_time,}
+    meters = {'batch_loss': batch_loss, 'batch_meas_loss': batch_meas_loss, 'batch_time': batch_time}
 
     logger.info(f"Start from {args.start_epoch} to {args.epochs} epochs")
     start_time = time.time()

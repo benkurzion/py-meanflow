@@ -5,6 +5,7 @@ import torch.nn as nn
 from models.time_sampler import sample_two_timesteps
 from models.ema import init_ema, update_ema_net
 from models.utils import sample_t_diff, sample_noisy_image
+from cifar_autoencoder import CifarEncoder
 
 
 class MeanFlow(nn.Module):
@@ -17,6 +18,7 @@ class MeanFlow(nn.Module):
         self.register_buffer("num_updates", torch.tensor(0))
         
         self.net_ema = init_ema(self.net, arch(**net_configs), args.ema_decay)
+        self.encoder = CifarEncoder()
 
         # maintain extra ema nets
         self.ema_decays = args.ema_decays
@@ -71,8 +73,13 @@ class MeanFlow(nn.Module):
             loss = loss / adp_wt
 
             loss = loss.mean()  # mean over batch dimension
-        
-        return loss
+
+            x_01 = (x + 1) / 2
+            x_0_hat_01 = ((z - t * u_pred).clamp(-1, 1) + 1) / 2
+            meas_loss = (self.encoder(x_01) - self.encoder(x_0_hat_01)).pow(2).mean()
+            loss = loss + self.args.zeta_prime * meas_loss
+
+        return loss, meas_loss.detach()
     
     def sample(self, samples_shape, net=None, device=None):
         net = net if net is not None else self.net_ema

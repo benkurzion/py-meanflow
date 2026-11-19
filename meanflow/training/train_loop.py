@@ -68,9 +68,9 @@ def get_compiled_counts():
 augment_pipe = AugmentPipe(p=0.12, xflip=1e8, yflip=0, scale=1, rotate_frac=0, aniso=1, translate_frac=1)  # turn off yflip and rotate
 
 def train_step(model_without_ddp, *args, **kwargs):
-    loss = model_without_ddp.forward_with_loss(*args, **kwargs)
+    loss, meas_loss = model_without_ddp.forward_with_loss(*args, **kwargs)
     loss.backward(create_graph=False)
-    return loss
+    return loss, meas_loss
 
 
 def train_one_epoch(
@@ -89,6 +89,7 @@ def train_one_epoch(
     model.train(True)
 
     batch_loss = meters['batch_loss']
+    batch_meas_loss = meters['batch_meas_loss']
     batch_time = meters['batch_time']
 
     # declare the unwrapped model
@@ -110,7 +111,7 @@ def train_one_epoch(
         if args.compile and epoch == args.start_epoch and data_iter_step == 0:
             logging.info(f"Compiling the first train step, this may take a while...")
         
-        loss = rng.train_step_with_rng_control(compiled_train_step, model_without_ddp, steps, args.seed, samples, aug_cond)
+        loss, meas_loss = rng.train_step_with_rng_control(compiled_train_step, model_without_ddp, steps, args.seed, samples, aug_cond)
         if args.compile:
             assert get_compiled_counts() > 0, "Compilation not triggered."
 
@@ -121,6 +122,7 @@ def train_one_epoch(
 
         loss_value = loss.item()
         batch_loss.update(loss_value)
+        batch_meas_loss.update(meas_loss.item())
 
         if not math.isfinite(loss_value):
             raise ValueError(f"Loss is {loss_value}, stopping training")
@@ -138,15 +140,18 @@ def train_one_epoch(
         lr_schedule.step()  # per-iteration lr
         if (steps + 1) % args.log_per_step == 0:
             loss_ave = batch_loss.compute().detach().cpu().numpy() # logging only
+            meas_loss_ave = batch_meas_loss.compute().detach().cpu().numpy()
             sec_per_iter = batch_time.compute()
             batch_time.reset()
             batch_loss.reset()
+            batch_meas_loss.reset()
             logger.info(
-                f"Epoch {epoch} [{data_iter_step}/{len(data_loader)}]: loss = {loss_ave:.6f}, lr = {lr:.6f}, steps = {steps}, sec_per_iter = {sec_per_iter:.4f}"
+                f"Epoch {epoch} [{data_iter_step}/{len(data_loader)}]: loss = {loss_ave:.6f}, meas_loss = {meas_loss_ave:.6f}, lr = {lr:.6f}, steps = {steps}, sec_per_iter = {sec_per_iter:.4f}"
             )
             epoch_1000x = int(steps / len(data_loader) * 1000)
             metrics = {
                 "loss": loss_ave,
+                "meas_loss": meas_loss_ave,
                 "lr": lr,
                 "epoch": steps / len(data_loader),
                 "steps": steps,
